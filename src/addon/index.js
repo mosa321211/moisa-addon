@@ -15,6 +15,15 @@ const TORRENTIO_PATH_PREFIX =
   process.env.TORRENTIO_PATH_PREFIX ||
   'qualityfilter=threed,480p,scr,cam,unknown';
 
+// Use only the selected Torrentio providers; no Russian providers are listed.
+const TORRENTIO_PROVIDERS = [
+  'yts',
+  'eztv',
+  '1337x',
+  'thepiratebay',
+  'ext'
+];
+
 // Base URL of the TorrServer instance.
 // Used as a fallback when no explicit `torrserver` is provided via query/config.
 const TORRSERVER_URL =
@@ -51,8 +60,15 @@ const builder = new addonBuilder({
  * `torrentioPathPrefix` so users can customize from the config page.
  */
 async function fetchTorrentioStreams({ type, id, torrentioPathPrefix }) {
-  const prefix = torrentioPathPrefix || TORRENTIO_PATH_PREFIX;
-  const url = `${TORRENTIO_BASE}/${prefix}/stream/${type}/${id}.json`;
+  const prefix = (torrentioPathPrefix || TORRENTIO_PATH_PREFIX)
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/(?:^|\|)providers=[^|]*(?=\||$)/g, '')
+    .replace(/^\|+|\|+$/g, '');
+  const providerConfig = `providers=${TORRENTIO_PROVIDERS.join(',')}`;
+  const torrentioConfig = prefix
+    ? `${providerConfig}|${prefix}`
+    : providerConfig;
+  const url = `${TORRENTIO_BASE}/${torrentioConfig}/stream/${type}/${id}.json`;
 
   log('fetchTorrentioStreams request', { type, id, url });
 
