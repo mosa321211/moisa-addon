@@ -52,6 +52,35 @@ const TORRENTIO_DEFAULT_PROVIDERS = [
   'thepiratebay',
   'ext'
 ];
+const TORRENTIO_PROVIDER_LABELS = {
+  yts: /^yts(?:\.mx)?$/i,
+  eztv: /^eztv(?:\.re)?$/i,
+  rarbg: /^rarbg$/i,
+  '1337x': /^1337x(?:\.to)?$/i,
+  thepiratebay: /^(?:the\s*)?pirate\s*bay$|^tpb$/i,
+  ext: /^ext$/i,
+  kickasstorrents: /^(?:kickass(?:torrents)?|kat)$/i,
+  torrentgalaxy: /^(?:torrent\s*galaxy|tgx)$/i,
+  uindex: /^uindex$/i,
+  knaben: /^knaben$/i,
+  magnetdl: /^magnet\s*dl$/i,
+  horriblesubs: /^horrible\s*subs$/i,
+  nyaasi: /^nyaa(?:\.si)?$/i,
+  animetosho: /^anime\s*tosho$/i,
+  tokyotosho: /^tokyo\s*tosho$/i,
+  anidex: /^anidex$/i,
+  nekobt: /^neko\s*bt$/i,
+  comando: /^comando$/i,
+  bludv: /^blu\s*dv$/i,
+  micoleaodublado: /^mico\s*leao\s*dublado$/i,
+  torrent9: /^torrent\s*9$/i,
+  ilcorsaronero: /^il\s*corsaro\s*nero$/i,
+  mejortorrent: /^mejor\s*torrent$/i,
+  wolfmax4k: /^wolf\s*max\s*4k$/i,
+  cinecalidad: /^cine\s*calidad$/i,
+  besttorrents: /^best\s*torrents$/i
+};
+const RUSSIAN_PROVIDER_LABEL = /\b(?:rutor|rutracker)\b|рутор|рутрекер/i;
 const TORRENTIO_SORTS = ['quality', 'qualitysize', 'seeders', 'size'];
 const TORRENTIO_QUALITY_IDS = [
   'brremux',
@@ -202,7 +231,58 @@ async function fetchTorrentioStreams({
     count: data.streams.length
   });
 
-  return data.streams;
+  // Torrentio can return stale or unexpected sources, so enforce the selected
+  // provider list locally as a final boundary. Prefer its explicit provider
+  // field or the provider label following the gear marker in the title.
+  let removedRussian = 0;
+  let removedUnselectedOrUnknown = 0;
+  const filteredStreams = data.streams.filter((stream) => {
+    const allText = [
+      stream.name,
+      stream.title,
+      stream.description,
+      stream.behaviorHints && stream.behaviorHints.filename
+    ]
+      .filter((value) => typeof value === 'string')
+      .join('\n');
+    const sourceCandidates = [stream.source, stream.provider].filter(
+      (value) => typeof value === 'string'
+    );
+    for (const field of [stream.title, stream.description, stream.name]) {
+      if (typeof field !== 'string') continue;
+      const marker = field.match(/(?:⚙️|provider\s*[:=])\s*([^\r\n]+)/i);
+      if (marker) sourceCandidates.push(marker[1].trim());
+      else if (!/^torrentio(?:\s|$)/i.test(field.trim())) {
+        // Some Torrentio responses expose the provider as the whole name.
+        sourceCandidates.push(field.trim());
+      }
+    }
+
+    if (
+      RUSSIAN_PROVIDER_LABEL.test(allText) ||
+      sourceCandidates.some((source) => RUSSIAN_PROVIDER_LABEL.test(source))
+    ) {
+      removedRussian += 1;
+      return false;
+    }
+    const isSelected = providerList.some((provider) => {
+      const label = TORRENTIO_PROVIDER_LABELS[provider];
+      return label && sourceCandidates.some((source) => label.test(source));
+    });
+    if (!isSelected) removedUnselectedOrUnknown += 1;
+    return isSelected;
+  });
+
+  log('fetchTorrentioStreams source filter', {
+    type,
+    id,
+    selectedProviders: providerList,
+    upstreamCount: data.streams.length,
+    filteredCount: filteredStreams.length,
+    removedRussian,
+    removedUnselectedOrUnknown
+  });
+  return filteredStreams;
 }
 
 // ---------------------------------------------------------------------------

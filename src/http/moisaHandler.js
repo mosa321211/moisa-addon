@@ -188,6 +188,11 @@ module.exports = async (req, res) => {
   // ---------------------------------------------------------------------------
 
   if (pathname.startsWith('/stream/')) {
+    // Stream results vary by the encoded configuration path; do not let a
+    // browser, Stremio, or an intermediary reuse results from another config.
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     const parts = pathname.split('/').filter(Boolean);
     if (parts.length < 3) {
       res.statusCode = 404;
@@ -233,6 +238,7 @@ module.exports = async (req, res) => {
 
     try {
       const response = await addonInterface.get('stream', type, id, extra);
+      if (response && typeof response === 'object') response.cacheMaxAge = 0;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.statusCode = 200;
       res.end(JSON.stringify(response));
