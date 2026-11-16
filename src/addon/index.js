@@ -52,6 +52,29 @@ const TORRENTIO_DEFAULT_PROVIDERS = [
   'thepiratebay',
   'ext'
 ];
+const TORRENTIO_SORTS = ['quality', 'qualitysize', 'seeders', 'size'];
+const TORRENTIO_QUALITY_IDS = [
+  'brremux',
+  'hdrall',
+  'dolbyvision',
+  'threed',
+  '4k',
+  '1080p',
+  '720p',
+  '480p',
+  'other',
+  'scr',
+  'cam',
+  'unknown'
+];
+const TORRENTIO_LANGUAGE_IDS = [
+  'japanese', 'italian', 'portuguese', 'spanish', 'latino', 'korean',
+  'chinese', 'taiwanese', 'french', 'german', 'dutch', 'hindi', 'telugu',
+  'tamil', 'polish', 'lithuanian', 'latvian', 'estonian', 'czech',
+  'slovakian', 'slovenian', 'hungarian', 'romanian', 'bulgarian', 'serbian',
+  'croatian', 'greek', 'danish', 'finnish', 'swedish', 'norwegian', 'turkish',
+  'arabic', 'persian', 'hebrew', 'vietnamese', 'indonesian', 'malay', 'thai'
+];
 
 // Base URL of the TorrServer instance.
 // Used as a fallback when no explicit `torrserver` is provided via query/config.
@@ -102,35 +125,59 @@ async function fetchTorrentioStreams({
     torrentioOptions && typeof torrentioOptions === 'object'
       ? torrentioOptions
       : {};
-  const requestedProviders = Array.isArray(options.providers)
+  const hasConfiguredProviders = Array.isArray(options.providers);
+  const requestedProviders = hasConfiguredProviders
     ? options.providers.filter((provider) =>
         TORRENTIO_PROVIDER_IDS.includes(provider)
       )
     : TORRENTIO_DEFAULT_PROVIDERS;
-  const providerList = requestedProviders.length
-    ? requestedProviders
-    : TORRENTIO_DEFAULT_PROVIDERS;
-  const parts = [`providers=${providerList.join(',')}`];
-  if (options.sort) parts.push(`sort=${encodeURIComponent(options.sort)}`);
-  if (Array.isArray(options.qualityFilters)) {
-    parts.push(`qualityfilter=${options.qualityFilters.join(',')}`);
-  } else if (prefix) {
-    parts.push(prefix);
+  if (hasConfiguredProviders && requestedProviders.length === 0) {
+    logWarn('No supported Torrentio providers selected', { type, id });
+    return [];
   }
-  if (options.limit) parts.push(`limit=${encodeURIComponent(options.limit)}`);
-  if (Number(options.minSeeders) > 0) {
-    parts.push(`minseeders=${encodeURIComponent(options.minSeeders)}`);
+  const providerList = requestedProviders;
+  const parts = [`providers=${providerList.join(',')}`];
+  if (TORRENTIO_SORTS.includes(options.sort)) {
+    parts.push(`sort=${options.sort}`);
+  }
+  if (Array.isArray(options.qualityFilters)) {
+    const qualities = options.qualityFilters.filter((quality) =>
+      TORRENTIO_QUALITY_IDS.includes(quality)
+    );
+    parts.push(`qualityfilter=${qualities.join(',')}`);
+  } else if (prefix) {
+    const legacyQualityFilter = prefix
+      .split('|')
+      .find((part) => part.startsWith('qualityfilter='));
+    if (legacyQualityFilter) {
+      const qualities = legacyQualityFilter
+        .slice('qualityfilter='.length)
+        .split(',')
+        .filter((quality) => TORRENTIO_QUALITY_IDS.includes(quality));
+      parts.push(`qualityfilter=${qualities.join(',')}`);
+    }
+  }
+  const limit = String(options.limit || '');
+  if (/^[1-9]\d*$/.test(limit)) parts.push(`limit=${limit}`);
+  const minSeeders = Number(options.minSeeders);
+  if (Number.isInteger(minSeeders) && minSeeders > 0) {
+    parts.push(`minseeders=${minSeeders}`);
   }
   if (Array.isArray(options.languages) && options.languages.length) {
-    parts.push(`language=${options.languages.map(encodeURIComponent).join(',')}`);
+    const languages = options.languages.filter((language) =>
+      TORRENTIO_LANGUAGE_IDS.includes(language)
+    );
+    if (languages.length) parts.push(`language=${languages.join(',')}`);
   }
-  if (options.sizeFilter) {
-    const sizeLimits = String(options.sizeFilter)
+  const configuredSizeLimit = options.sizeLimit || options.sizeFilter;
+  if (configuredSizeLimit) {
+    const sizeLimits = String(configuredSizeLimit)
       .split(',')
-      .map((size) => encodeURIComponent(size.trim()))
+      .map((size) => size.trim().replace(/\s+/g, '').toLowerCase())
+      .filter((size) => /^\d+(?:\.\d+)?(?:kb|mb|gb|tb)$/.test(size))
       .filter(Boolean)
       .join(',');
-    if (sizeLimits) parts.push(`sizefilter=${sizeLimits}`);
+    if (sizeLimits) parts.push(`sizelimit=${sizeLimits}`);
   }
   const torrentioConfig = parts.join('|');
   const url = `${TORRENTIO_BASE}/${torrentioConfig}/stream/${type}/${id}.json`;

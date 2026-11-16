@@ -11,7 +11,10 @@ const { pipeline } = require('stream/promises');
 function decodeConfig(query) {
   if (!query || !query.config) return null;
   try {
-    const json = Buffer.from(String(query.config), 'base64').toString('utf8');
+    const encoded = String(query.config)
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    const json = Buffer.from(encoded, 'base64').toString('utf8');
     const cfg = JSON.parse(json);
     return cfg && typeof cfg === 'object' ? cfg : null;
   } catch {
@@ -41,9 +44,15 @@ module.exports = async (req, res) => {
   const fullUrl = new URL(req.url, `${baseProto}://${baseHost}`);
   const baseUrl = `${baseProto}://${baseHost}`;
 
-  // Normalized path relative to the API root, e.g. "/manifest.json".
-  const pathname = fullUrl.pathname.replace(/^\/api\/moisa/, '') || '/';
+  // Stremio requests addon resources relative to the manifest path. Keep
+  // configuration in that path so it survives from manifest to /stream.
+  const requestPath = fullUrl.pathname.replace(/^\/api\/moisa/, '') || '/';
+  const configPath = requestPath.match(/^\/_config\/([A-Za-z0-9_-]+)(?=\/)/);
+  const pathname = configPath
+    ? requestPath.slice(configPath[0].length) || '/'
+    : requestPath;
   const query = Object.fromEntries(fullUrl.searchParams.entries());
+  if (configPath && !query.config) query.config = configPath[1];
 
   // CORS – needed for Stremio Web.
   res.setHeader('Access-Control-Allow-Origin', '*');

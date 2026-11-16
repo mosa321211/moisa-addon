@@ -255,12 +255,15 @@
         });
 
         function b64Utf8(value) {
-          return btoa(unescape(encodeURIComponent(value)));
+          return btoa(unescape(encodeURIComponent(value)))
+            .replace(/\+/g, '-')
+            .replace(/\//g, '_')
+            .replace(/=+$/g, '');
         }
 
         function buildManifestUrl(config) {
           var basePath = window.location.pathname.replace(/\/(config|configure)\/?$/, '');
-          return window.location.origin + basePath + '/manifest.json?config=' + encodeURIComponent(b64Utf8(JSON.stringify(config)));
+          return window.location.origin + basePath + '/_config/' + b64Utf8(JSON.stringify(config)) + '/manifest.json';
         }
 
         document.getElementById('generate-btn').addEventListener('click', function () {
@@ -282,7 +285,7 @@
               minSeeders: Math.max(0, minSeeders),
               languages: selectedLanguages,
               qualityFilters: selectedQuality,
-              sizeFilter: document.getElementById('size-filter').value.trim()
+              sizeLimit: document.getElementById('size-filter').value.trim()
             }
           };
           var user = document.getElementById('torrserver-user').value;

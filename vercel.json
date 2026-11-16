@@ -17,6 +17,10 @@
       "dest": "/src/http/moisaHandler.js"
     },
     {
+      "src": "/_config/(.*)",
+      "dest": "/src/http/moisaHandler.js"
+    },
+    {
       "src": "/manifest.json",
       "dest": "/src/http/moisaHandler.js"
     },
