@@ -15,8 +15,37 @@ const TORRENTIO_PATH_PREFIX =
   process.env.TORRENTIO_PATH_PREFIX ||
   'qualityfilter=threed,480p,scr,cam,unknown';
 
-// Use only the selected Torrentio providers; no Russian providers are listed.
-const TORRENTIO_PROVIDERS = [
+// Torrentio providers available in configuration. Russian providers are
+// intentionally excluded from both the defaults and the accepted options.
+const TORRENTIO_PROVIDER_IDS = [
+  'yts',
+  'eztv',
+  'rarbg',
+  '1337x',
+  'thepiratebay',
+  'ext',
+  'kickasstorrents',
+  'torrentgalaxy',
+  'uindex',
+  'knaben',
+  'magnetdl',
+  'horriblesubs',
+  'nyaasi',
+  'animetosho',
+  'tokyotosho',
+  'anidex',
+  'nekobt',
+  'comando',
+  'bludv',
+  'micoleaodublado',
+  'torrent9',
+  'ilcorsaronero',
+  'mejortorrent',
+  'wolfmax4k',
+  'cinecalidad',
+  'besttorrents'
+];
+const TORRENTIO_DEFAULT_PROVIDERS = [
   'yts',
   'eztv',
   '1337x',
@@ -59,15 +88,51 @@ const builder = new addonBuilder({
  * The quality/path filter can be overridden per request via
  * `torrentioPathPrefix` so users can customize from the config page.
  */
-async function fetchTorrentioStreams({ type, id, torrentioPathPrefix }) {
+async function fetchTorrentioStreams({
+  type,
+  id,
+  torrentioPathPrefix,
+  torrentioOptions
+}) {
   const prefix = (torrentioPathPrefix || TORRENTIO_PATH_PREFIX)
     .replace(/^\/+|\/+$/g, '')
     .replace(/(?:^|\|)providers=[^|]*(?=\||$)/g, '')
     .replace(/^\|+|\|+$/g, '');
-  const providerConfig = `providers=${TORRENTIO_PROVIDERS.join(',')}`;
-  const torrentioConfig = prefix
-    ? `${providerConfig}|${prefix}`
-    : providerConfig;
+  const options =
+    torrentioOptions && typeof torrentioOptions === 'object'
+      ? torrentioOptions
+      : {};
+  const requestedProviders = Array.isArray(options.providers)
+    ? options.providers.filter((provider) =>
+        TORRENTIO_PROVIDER_IDS.includes(provider)
+      )
+    : TORRENTIO_DEFAULT_PROVIDERS;
+  const providerList = requestedProviders.length
+    ? requestedProviders
+    : TORRENTIO_DEFAULT_PROVIDERS;
+  const parts = [`providers=${providerList.join(',')}`];
+  if (options.sort) parts.push(`sort=${encodeURIComponent(options.sort)}`);
+  if (Array.isArray(options.qualityFilters)) {
+    parts.push(`qualityfilter=${options.qualityFilters.join(',')}`);
+  } else if (prefix) {
+    parts.push(prefix);
+  }
+  if (options.limit) parts.push(`limit=${encodeURIComponent(options.limit)}`);
+  if (Number(options.minSeeders) > 0) {
+    parts.push(`minseeders=${encodeURIComponent(options.minSeeders)}`);
+  }
+  if (Array.isArray(options.languages) && options.languages.length) {
+    parts.push(`language=${options.languages.map(encodeURIComponent).join(',')}`);
+  }
+  if (options.sizeFilter) {
+    const sizeLimits = String(options.sizeFilter)
+      .split(',')
+      .map((size) => encodeURIComponent(size.trim()))
+      .filter(Boolean)
+      .join(',');
+    if (sizeLimits) parts.push(`sizefilter=${sizeLimits}`);
+  }
+  const torrentioConfig = parts.join('|');
   const url = `${TORRENTIO_BASE}/${torrentioConfig}/stream/${type}/${id}.json`;
 
   log('fetchTorrentioStreams request', { type, id, url });
@@ -314,7 +379,8 @@ builder.defineStreamHandler(async ({ type, id, extra }) => {
     const streams = await fetchTorrentioStreams({
       type,
       id,
-      torrentioPathPrefix: extra && extra.torrentioPathPrefix
+      torrentioPathPrefix: extra && extra.torrentioPathPrefix,
+      torrentioOptions: extra && extra.torrentioOptions
     });
 
     if (!streams.length) {

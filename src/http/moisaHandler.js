@@ -210,6 +210,9 @@ module.exports = async (req, res) => {
       ...(cfg && cfg.torrentioPathPrefix
         ? { torrentioPathPrefix: cfg.torrentioPathPrefix }
         : {}),
+      ...(cfg && cfg.torrentioOptions && typeof cfg.torrentioOptions === 'object'
+        ? { torrentioOptions: cfg.torrentioOptions }
+        : {}),
       _base: baseUrl
     };
 
